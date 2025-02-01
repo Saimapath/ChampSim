@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include "../../inc/trace_instruction.h"
+#include <unistd.h>
 
 // defines for the paths for the various decompression programs and Apple/Linux differences
 
@@ -139,6 +140,7 @@ struct trace {
 
     assert(fread(&type, 1, 1, f) == 1);
 
+    //saima fprintf(stderr, "type %d\t", type);
     // base on the type, read in different stuff
 
     switch (type) {
@@ -147,7 +149,10 @@ struct trace {
       // load or store? get the effective address and access size
 
       assert(fread(&EA, 8, 1, f) == 1);
+      //saima fprintf(stderr, "EA %lld\t", EA);
+
       assert(fread(&access_size, 1, 1, f) == 1);
+      //saima fprintf(stderr, "access_size %d\t", access_size);
       break;
     case condBranchInstClass:
     case uncondDirectBranchInstClass:
@@ -158,6 +163,7 @@ struct trace {
       assert(fread(&taken, 1, 1, f) == 1);
       if (taken) {
         assert(fread(&target, 8, 1, f) == 1);
+       //saima  fprintf(stderr, "target %lld\t", target);
       } else {
         // if not taken, default target is fallthru, i.e. PC+4
         target = PC + 4;
@@ -176,7 +182,11 @@ struct trace {
     assert(fread(&num_input_regs, 1, 1, f) == 1);
     for (int i = 0; i < num_input_regs; i++) {
       assert(fread(&input_reg_names[i], 1, 1, f) == 1);
-    }
+      //saima fprintf(stderr, "input_reg_names %d\t", input_reg_names[i]);
+
+
+    } 
+    //saima fprintf(stderr, "num_input_regs %d\n", num_input_regs);
 
     // get the number of output registers and their names
 
@@ -273,7 +283,7 @@ auto open_trace_file(void)
     // no magic number? maybe it's uncompressed?
     fprintf(stderr, "opening file \"%s\"\n", tracefilename);
     fflush(stderr);
-
+   
     // use Unix cat to open and read this file. we could just fopen the file
     // but then we're pclosing it later so that could get weird
 
@@ -376,7 +386,7 @@ int main(int argc, char** argv)
 
   if (!f)
     return 1;
-
+  sleep(5);
   // number of records read so far
   long long int n = 0;
   trace oldt;
@@ -391,7 +401,7 @@ int main(int argc, char** argv)
     n++;
 
     // print something to entertain the user while they wait
-
+    //fprintf(stderr, "%lld th instruction:\t", n);
     if (n % 1000000 == 0) {
       fprintf(stderr, "%lld instructions\n", n);
       fflush(stderr);
@@ -400,6 +410,7 @@ int main(int argc, char** argv)
     // read a record from the trace file
 
     bool good = t.read(f);
+    //sleep(2);
     if (t.PC == oldt.PC) {
       fprintf(stderr, "hmm, that's weird\n");
     }
@@ -410,7 +421,15 @@ int main(int argc, char** argv)
 
     if (!good)
       break;
+
     trace_instr_format ct;
+
+    for (int x = 0; x < 255; x++) {
+      ct.reg_values[x][0] = registers[x][0];
+      ct.reg_values[x][1] = registers[x][1];
+    }
+
+
     ct.ip = t.PC;
     ct.is_branch = false;
     // we are going to figure out the op type
@@ -518,6 +537,16 @@ int main(int argc, char** argv)
       default:
         assert(0);
       }
+
+      //saima
+
+      for (int i = 0; i < t.num_output_regs; i++) {
+      int x = t.output_reg_names[i];
+      ct.reg_values[x][0] = t.output_reg_values[x][0];
+      ct.reg_values[x][1] = t.output_reg_values[x][1];
+      }
+
+
       fwrite(&ct, sizeof(ct), 1, stdout); // write a branch trace
     } else {
       memset(ct.destination_registers, 0, sizeof(ct.destination_registers));
@@ -572,6 +601,17 @@ int main(int argc, char** argv)
         case undefInstClass:
           assert(0);
         }
+        //saima
+      for (int i = 0; i < t.num_output_regs; i++) {
+      int x = t.output_reg_names[i];
+      // //trysaima
+      // t.output_reg_values[x][0]=n;
+      // t.output_reg_values[x][1]=n+2;
+      ct.reg_values[x][0] = t.output_reg_values[x][0];
+      ct.reg_values[x][1] = t.output_reg_values[x][1];
+        }
+
+        
         fwrite(&ct, sizeof(ct), 1, stdout); // write a non-branch trace
       }
     }
@@ -583,8 +623,18 @@ int main(int argc, char** argv)
       registers[x][0] = t.output_reg_values[x][0];
       registers[x][1] = t.output_reg_values[x][1];
     }
+
+
     if (verbose) {
       static long long int n = 0;
+
+      //saima
+      if (n>15)
+      {
+        break;
+      }
+
+
       fprintf(stderr, "%lld %llx ", ++n, t.PC);
       if (c == OPTYPE_OP) {
         switch (t.type) {
@@ -611,6 +661,17 @@ int main(int argc, char** argv)
       } else {
         fprintf(stderr, "%s %llx", branch_names[c], t.target);
       }
+
+      //saima trial
+      // for (int i = 20; i < 25 && i>19; i++)
+      //   {  fprintf(stderr, "R%d:0x%016llx%016llx \n", i, ct.reg_values[i][1],ct.reg_values[i][0]);
+      //      fprintf(stderr, "R%d:0x%016llx%016llx \n", i, t.output_reg_values[i][1],t.output_reg_values[i][0]);
+      //      fprintf(stderr, "R%d:0x%016llx%016llx \n", i, registers[i][1],registers[i][0]);
+
+
+      //   }
+
+
       fprintf(stderr, "\n");
     }
   }
